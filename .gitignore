@@ -4,3 +4,5 @@
 Debug/
 *.cmd
 targetConfigs/
+*.o
+*.exe
