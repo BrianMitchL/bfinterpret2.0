@@ -6,7 +6,7 @@ For use with the BrainFuck language
 
 ###In CCStudio:
 
-1. Build the project (follow the *Broken Build* section if the build breaks)
+1. Build the project (follow the **Broken Build** section if the build breaks)
 2. Debug the code on the LaunchPad
 
 ### In Console/Terminal:
