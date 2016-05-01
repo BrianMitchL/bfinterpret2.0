@@ -5,34 +5,134 @@
 //****************************************************************************
 
 #include "msp.h"
-#include "portfunc.h"
 #include "clock.h"
 #include "uart.h"
+#include "portfunc.h"
+#include <string.h>
 
 unsigned char memloc[10000];
 unsigned char progLoc[10000];
-
-unsigned long testCRC(int nw,unsigned short* data)
-{
-	int i;
-	int rv=1;
-	if(nw<0)
-	{
-		rv=0;
-		nw=-nw;
-	}
-	for(i=0;i<nw;i++)
-	{
-		if(rv)
-			CRC32DIRB=data[i];
-		else
-			CRC32DI=data[i];
-	}
-	return CRC32RESR_LO|(CRC32RESR_HI<<16);
-}
+unsigned char* currentAddress;
+unsigned char* currentInstruction;
+unsigned char* returnTo[20];
+unsigned char* jumpTo[20];
 
 extern struct UARTBuf TXBuf;
 extern struct UARTBuf RXBuf;
+
+
+void InitializeOutput(unsigned char n)
+{
+	P1DIR|=BIT(n);
+	SelectPortFunction(1,n,0,0);
+	P1OUT|=BIT(n);
+}
+
+void outputByte(unsigned char q)
+{
+	writeChar(q);
+	ForceFirstChar();
+}
+
+void inputByte(unsigned char* q)
+{
+	while(getBufferLength(&RXBuf));
+	q==(unsigned char*)TakeCharFromBuf(&RXBuf);
+}
+
+int ProcessChar(unsigned char cmd)
+{
+	int step=1;
+	switch(cmd)
+	{
+	case '>':
+		currentAddress++;
+		break;
+	case '<':
+		currentAddress--;
+		break;
+	case '+':
+		(*currentAddress)++;
+		break;
+	case '-':
+		(*currentAddress)--;
+		break;
+	case '.':
+		outputByte(*currentAddress);
+		break;
+	case ',':
+		inputByte(currentAddress);
+		break;
+	case '[':
+		if(*currentAddress==0)
+		{
+			unsigned char stackDepth=0;
+			unsigned char*currentIP=currentInstruction+1;
+			while(*currentIP!=']'||stackDepth>0)
+			{
+				if(*currentIP==']')
+					stackDepth-=1;
+				if(*currentIP=='[')
+					stackDepth+=1;
+				currentIP+=1;
+			}
+			currentInstruction=currentIP;
+		}
+		step=1;
+		break;
+	case ']':
+	{
+		if(*currentAddress!=0)
+		{
+			unsigned char stackDepth=0;
+			unsigned char*currentIP=currentInstruction-1;
+			while(*currentIP!='['||stackDepth>0)
+			{
+				if(*currentIP==']')
+					stackDepth+=1;
+				if(*currentIP=='[')
+					stackDepth-=1;
+				currentIP-=1;
+			}
+			currentInstruction=currentIP;
+		}
+		step=1;
+		break;
+	}
+	case 0:
+		step=-1;
+	}
+	return step;
+}
+
+int runBFprog()
+{
+  currentAddress=memloc;
+  memset(memloc,0,10000);
+  currentInstruction=progLoc;
+  int rv;
+  while((rv=ProcessChar(*currentInstruction))>-1)
+  {
+	  if(rv)
+	  {
+		  currentInstruction++;
+	  }
+  }
+  return rv;
+}
+
+unsigned long len;
+unsigned char* lp=(unsigned char*)&len;
+
+unsigned long CRC(int len, unsigned short* data)
+{
+	int i;
+	for(i=0; i<len; i++)
+	{
+		CRC32DIRB=data[i];
+	}
+	return (CRC32RESR_HI<<16)|CRC32RESR_LO;
+}
 
 int loadBFprog(void)
 {
@@ -58,12 +158,12 @@ int loadBFprog(void)
 		if(i%2)
 		{
 			crctval=(*lp)|(*(lp-1)<<8);
-			(void)testCRC(1,&crctval);
+			(void)CRC(1,&crctval);
 		}
 		else if(i==len-1)
 		{
 			crctval=((*lp)<<8);
-			(void)testCRC(1,&crctval);
+			(void)CRC(1,&crctval);
 		}
 		lp++;
 	}
@@ -77,7 +177,7 @@ int loadBFprog(void)
 	while(!getBufferLength(&RXBuf));
 	k=TakeCharFromBuf(&RXBuf);
 	*lp=(unsigned char)k;
-	(void)testCRC(1,csv);
+	(void)CRC(1,csv);
 	lp=(unsigned char*)(&csv[1]);
 	while(!getBufferLength(&RXBuf));
 	k=TakeCharFromBuf(&RXBuf);
@@ -87,7 +187,7 @@ int loadBFprog(void)
 	k=TakeCharFromBuf(&RXBuf);
 	*lp=(unsigned char)k;
 
-	return !!testCRC(1,csv+1);
+	return !!CRC(1,csv+1);
 }
 
 unsigned long progSize(int* odd)
@@ -110,61 +210,62 @@ unsigned long progSize(int* odd)
 
 void main(void)
 {
+	WDTCTL = WDTPW | WDTHOLD; // Stop watchdog timer
+    SetClockFrequency();
+    InitializeOutput(2);
+    InitializeOutput(3);
+    ConfigureUART();
+    NVIC_EnableIRQ(EUSCIA0_IRQn);
 
-	WDTCTL = WDTPW | WDTHOLD;           // Stop watchdog timer
-	SetClockFrequency();
-	ConfigureUART();
-	NVIC_EnableIRQ(EUSCIA0_IRQn);
 	for(;;)
-	{
+    	{
 		if(getBufferLength(&RXBuf))
 		{
-			int cmd=TakeCharFromBuf(&RXBuf);
-			switch(cmd)
-			{
-			case 'L':
-			case 'l':
-				if(!loadBFprog())
-				{
-					writeChar('K');
-					ForceFirstChar();
-				}
-				else
-				{
-					writeChar('F');
-					ForceFirstChar();
-				}
-				break;
-			case 'X':
-			case 'x':
-				break;
-			case 'S':
-			case 's':
-			{
-				CRC32INIRES_LO=0xFFFF;
-				CRC32INIRES_HI=0xFFFF;
-				int isOdd;
-				unsigned long ps=progSize(&isOdd);
-				dumpULong(ps);
-				ForceFirstChar();
-				unsigned long crcret=testCRC(ps/2,(unsigned short*)progLoc);
-				unsigned char* lp=progLoc;
-				while(*lp)
-				{
-					writeChar(*lp);
-					ForceFirstChar();
-					lp++;
-				}
-				if(isOdd)
-				{
-					writeChar(*lp);
-				}
-				dumpULong(crcret);
-				//ForceFirstChar();
-				break;
-			}
-			}
+			int command=TakeCharFromBuf(&RXBuf); //read file
+			switch(command)
+			    		{
+			    		case 'L':
+			    		case 'l':
+			    			if(!loadBFprog())
+			    			{
+			    				writeChar('K');
+			    				ForceFirstChar();
+			    			}
+			    			else
+			    			{
+			    				writeChar('F');
+			    				ForceFirstChar();
+			    			}
+			    			break;
+			    		case 'X':
+			    		case 'x':
+			    			runBFprog();
+			    			break;
+			    		case 'S':
+			    		case 's':
+			    		{
+			    			CRC32INIRES_LO=0xFFFF;
+			    			CRC32INIRES_HI=0xFFFF;
+			    			int isOdd;
+			    			unsigned long ps=progSize(&isOdd);
+			    			dumpULong(ps);
+			    			ForceFirstChar();
+			    			unsigned long crcret=CRC(ps/2,(unsigned short*)progLoc);
+							unsigned char* lp=progLoc;
+							while(*lp)
+							{
+								writeChar(*lp);
+								ForceFirstChar();
+								lp++;
+							}
+							if(isOdd)
+							{
+								writeChar(*lp);
+							}
+							dumpULong(crcret);
+			    			break;
+			    		}
+			    		}
 		}
-	}
+    	}
 }
-
