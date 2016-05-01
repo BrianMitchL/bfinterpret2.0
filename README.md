@@ -11,9 +11,10 @@ For use with the BrainFuck language
 
 ### In Console/Terminal:
 
-3. cd into the crc folder
-4. run ```make```
-5. run ```./bftest.exe```
+3. Navigate to bfinterpret2.0 folder
+4. ```cd crc```
+4. ```make```
+5. ```./bftest.exe```
 6. The program should read "Hello World" from the launchpad.
 
 ####Broken Build
