@@ -5,12 +5,12 @@
  *      Author: kevin
  */
 
-#ifndef CLOCK_H_
-#define CLOCK_H_
+#ifndef BFINTERPRET2_0_0_CLOCK_H_
+#define BFINTERPRET2_0_0_CLOCK_H_
 
 #include "msp.h"
 
 void SetClockFrequency(void);
 unsigned int ReadClockFrequency(void);
 
-#endif /* CLOCK_H_ */
+#endif /* BFINTERPRET2_0_0_CLOCK_H_ */

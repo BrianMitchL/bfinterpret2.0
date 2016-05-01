@@ -5,8 +5,8 @@
  *      Author: kevin
  */
 
-#ifndef UART_H_
-#define UART_H_
+#ifndef BFINTERPRET2_0_0_UART_H_
+#define BFINTERPRET2_0_0_UART_H_
 
 #include "msp.h"
 
@@ -37,4 +37,4 @@ void write3RegValue(unsigned char,unsigned char*);
 void writeString(const char*);
 void UARTInterrupt(void);
 
-#endif /* UART_H_ */
+#endif /* BFINTERPRET2_0_0_UART_H_ */
