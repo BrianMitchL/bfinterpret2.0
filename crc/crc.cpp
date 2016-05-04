@@ -167,6 +167,8 @@ int main(void)
 		//{0x31,0x32,0x33,0x34,0x35,0x36,0x37,0x38,0x39,0x00};
 //  char msg[]="This is a text message.";
   int h=EstablishComPort("/dev/cu.usbmodem00000001");
+  //For linux use the in h from the line below
+  //int h=EstablishComPort("/dev/ttyACM0");
   if(!h)
   {
     printf("Port not opened\n");
